@@ -1,10 +1,12 @@
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 import requests
 import psycopg2
 from psycopg2.extras import execute_values
-from psycopg2 import OperationalError
+from psycopg2 import OperationalError,sql
 
 app = Flask(__name__)
+CORS(app)
 
 # PostgreSQL database configuration
 db_config = {
@@ -22,6 +24,68 @@ try:
 except OperationalError as e:
     print("Error while connecting to PostgreSQL", e)
 
+def create_database():
+    # Connect to the PostgreSQL server
+    conn = psycopg2.connect(user=db_config['user'], password=db_config['password'], host=db_config['host'], port=db_config['port'])
+    conn.autocommit = True  # Enable autocommit to create the database
+    cursor = conn.cursor()
+    
+    try:
+        # Check if the database already exists
+        cursor.execute(sql.SQL("SELECT 1 FROM pg_database WHERE datname = %s"), [db_config['dbname']])
+        exists = cursor.fetchone()
+        
+        if not exists:
+            # Create the database if it doesn't exist
+            cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_config['dbname'])))
+            print(f"Database '{db_config['dbname']}' created successfully.")
+        else:
+            print(f"Database '{db_config['dbname']}' already exists. No need to create.")
+    except Exception as e:
+        print(f"Error creating database: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+def create_table():
+    # Connect to the specified database
+    conn = psycopg2.connect(**db_config)
+    cursor = conn.cursor()
+    
+    # SQL statement to create the table
+    create_table_query = """
+    CREATE TABLE IF NOT EXISTS videos (
+        video_id VARCHAR(50) PRIMARY KEY NOT NULL,
+        title TEXT,
+        description TEXT,
+        published_at TIMESTAMP WITHOUT TIME ZONE,
+        thumbnail_url TEXT,
+        tags TEXT[]
+    );
+    """
+    try:
+        # Check if the table exists by querying the information schema
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT 1 
+                FROM information_schema.tables 
+                WHERE table_name = 'videos'
+            );
+        """)
+        exists = cursor.fetchone()[0]
+        
+        if not exists:
+            # Create the table if it doesn't exist
+            cursor.execute(create_table_query)
+            print("Table 'videos' created successfully.")
+        else:
+            print("Table 'videos' already exists. No need to create.")
+    except Exception as e:
+        print(f"Error creating table: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
 @app.route('/api/videos', methods=['GET'])
 def get_videos():
     query = request.args.get('query', 'cricket')  # Default to 'cricket'
@@ -34,7 +98,7 @@ def get_videos():
         "part": "snippet",
         "q": query,
         "type": "video",
-        "maxResults": 1,
+        "maxResults": 50,
         "fields": "items(id/videoId)",
         "key": api_key
     }
@@ -94,6 +158,17 @@ def get_videos_details():
     # Connect to the PostgreSQL database
     with psycopg2.connect(**db_config) as conn:
         with conn.cursor() as cur:
+
+            cur.execute("SELECT COUNT(*) FROM videos;")
+            total_count = cur.fetchone()[0]
+
+            if total_count == 0:
+                # If no records exist, fetch and store video data
+                response_message = get_videos()  # Call your function to fetch and store videos
+                print(response_message)
+            else:
+                print("table in not empty :",total_count)
+
             # Step 1: Retrieve video details from PostgreSQL
             select_query = """
                 SELECT video_id, title, description, published_at, thumbnail_url, tags
@@ -169,4 +244,6 @@ def search_videos():
     return jsonify({"videos": videos})
 
 if __name__ == '__main__':
+    create_database()
+    create_table()
     app.run(debug=True)

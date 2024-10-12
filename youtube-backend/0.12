@@ -1,0 +1,15 @@
+Collecting Flask
+  Downloading Flask-2.2.5-py3-none-any.whl.metadata (3.9 kB)
+Requirement already satisfied: Werkzeug>=2.2.2 in d:\project_venv\lib\site-packages (from Flask) (2.2.3)
+Requirement already satisfied: Jinja2>=3.0 in d:\project_venv\lib\site-packages (from Flask) (3.1.4)
+Requirement already satisfied: itsdangerous>=2.0 in d:\project_venv\lib\site-packages (from Flask) (2.1.2)
+Requirement already satisfied: click>=8.0 in d:\project_venv\lib\site-packages (from Flask) (8.1.7)
+Requirement already satisfied: importlib-metadata>=3.6.0 in d:\project_venv\lib\site-packages (from Flask) (6.7.0)
+Requirement already satisfied: colorama in d:\project_venv\lib\site-packages (from click>=8.0->Flask) (0.4.6)
+Requirement already satisfied: zipp>=0.5 in d:\project_venv\lib\site-packages (from importlib-metadata>=3.6.0->Flask) (3.15.0)
+Requirement already satisfied: typing-extensions>=3.6.4 in d:\project_venv\lib\site-packages (from importlib-metadata>=3.6.0->Flask) (4.7.1)
+Requirement already satisfied: MarkupSafe>=2.0 in d:\project_venv\lib\site-packages (from Jinja2>=3.0->Flask) (2.1.5)
+Downloading Flask-2.2.5-py3-none-any.whl (101 kB)
+   -------------------------------------- 101.8/101.8 kB 840.2 kB/s eta 0:00:00
+Installing collected packages: Flask
+Successfully installed Flask-2.2.5

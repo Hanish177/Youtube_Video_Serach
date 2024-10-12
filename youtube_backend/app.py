@@ -25,6 +25,26 @@ try:
 except OperationalError as e:
     print("Error while connecting to PostgreSQL", e)
 
+@app.route('/api/start_cron', methods=['POST'])
+def start_cron():
+    try:
+        # Add a new cron job for fetching videos every 10 minutes
+        cron_job = "*/10 * * * * /path/to/fetch_videos.sh"  # Adjust the path accordingly
+        # Check if the cron job is already present
+        os.system(f"(crontab -l | grep -v 'fetch_videos.sh'; echo '{cron_job}') | crontab -")
+        return jsonify({"message": "Cron job started successfully."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/stop_cron', methods=['POST'])
+def stop_cron():
+    try:
+        # Remove the cron job that contains "fetch_videos.sh"
+        os.system(f"crontab -l | grep -v 'fetch_videos.sh' | crontab -")
+        return jsonify({"message": "Cron job stopped successfully."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 def create_database():
     # Connect to the PostgreSQL server
     conn = psycopg2.connect(user=db_config['user'], password=db_config['password'], host=db_config['host'], port=db_config['port'])

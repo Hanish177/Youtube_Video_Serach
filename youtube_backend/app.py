@@ -4,17 +4,18 @@ import requests
 import psycopg2
 from psycopg2.extras import execute_values
 from psycopg2 import OperationalError,sql
+import os
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["http://frontedn:3000"])
 
 # PostgreSQL database configuration
 db_config = {
-    "dbname": "youtube_data",
-    "user": "postgres",
-    "password": "1234",
-    "host": "localhost",
-    "port": "5432"
+    'user': os.getenv('DB_USER'),
+    'password': os.getenv('DB_PASSWORD'),
+    'host': os.getenv('DB_HOST'),  # This should now point to the "db" service
+    'port': os.getenv('DB_PORT'),
+    'dbname': os.getenv('DB_NAME')
 }
 
 try:
@@ -207,27 +208,41 @@ def get_videos_details():
 
 @app.route('/api/videos/search', methods=['GET'])
 def search_videos():
-    # Get the search query from request parameters
+    # Get the search query, page, and limit from request parameters
     query = request.args.get('query', '')
+    page = request.args.get('page', 1, type=int)  # Default to page 1
+    limit = request.args.get('limit', 10, type=int)  # Default limit of 10 results per page
 
     if not query:
         return jsonify({"message": "Search query cannot be empty"}), 400
 
+    offset = (page - 1) * limit  # Calculate offset for pagination
+
     # Connect to the PostgreSQL database
     with psycopg2.connect(**db_config) as conn:
         with conn.cursor() as cur:
-            # Step 1: Retrieve video details matching the search query
-            search_query = """
-                SELECT video_id, title, description, published_at, thumbnail_url, tags
+            # Step 1: Retrieve count of total matching records for pagination
+            count_query = """
+                SELECT COUNT(*)
                 FROM videos
                 WHERE LOWER(title) LIKE LOWER(%s) OR LOWER(description) LIKE LOWER(%s);
             """
-            # Use wildcard '%' for LIKE operator to allow partial matching
             search_param = f"%{query}%"
-            cur.execute(search_query, (search_param, search_param))
+            cur.execute(count_query, (search_param, search_param))
+            total_count = cur.fetchone()[0]
+
+            # Step 2: Retrieve paginated video details matching the search query in descending order by published_at
+            search_query = """
+                SELECT video_id, title, description, published_at, thumbnail_url, tags
+                FROM videos
+                WHERE LOWER(title) LIKE LOWER(%s) OR LOWER(description) LIKE LOWER(%s)
+                ORDER BY published_at DESC
+                LIMIT %s OFFSET %s;
+            """
+            cur.execute(search_query, (search_param, search_param, limit, offset))
             rows = cur.fetchall()
 
-            # Step 2: Format the response
+            # Step 3: Format the response with the paginated results
             videos = []
             for row in rows:
                 video = {
@@ -240,10 +255,16 @@ def search_videos():
                 }
                 videos.append(video)
 
-    # Step 3: Return the search results
-    return jsonify({"videos": videos})
+    # Step 4: Create and return the paginated response
+    response = {
+        "page": page,
+        "limit": limit,
+        "total_count": total_count,
+        "videos": videos
+    }
+    return jsonify(response)
 
 if __name__ == '__main__':
     create_database()
     create_table()
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000)

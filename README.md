@@ -26,6 +26,18 @@ To get started with the project, clone the repository using the following comman
 git clone <your-repo-url>
 cd <your-repo-directory>
 ```
+
+Export required variables
+
+```bash
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - API_KEY=${API_KEY}
+```
+
 To run the service 
 
 ```bash

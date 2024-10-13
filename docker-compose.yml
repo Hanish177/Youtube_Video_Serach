@@ -14,11 +14,12 @@ services:
     build:
       context: ./youtube_backend
     environment:
-    - DB_HOST=db  # Use the Docker Compose service name
-    - DB_PORT=5432
-    - DB_USER=postgres
-    - DB_PASSWORD=1234
-    - DB_NAME=youtube_data
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - API_KEY=${API_KEY}
     volumes:
     - ./youtube_backend/app.py:/app/app.py
     ports:

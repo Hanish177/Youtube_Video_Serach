@@ -110,7 +110,7 @@ def create_table():
 @app.route('/api/videos', methods=['GET'])
 def get_videos():
     query = request.args.get('query', 'cricket')  # Default to 'cricket'
-    api_key = 'AIzaSyBfFYIQE0fy3-MtlpKGSC8YxqHkTiDALPU'  # Replace with your actual API key
+    api_key = os.getenv('API_KEY')  # Replace with your actual API key
     search_url = "https://www.googleapis.com/youtube/v3/search"
     video_details_url = "https://www.googleapis.com/youtube/v3/videos"
 

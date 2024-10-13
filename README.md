@@ -25,8 +25,13 @@ To get started with the project, clone the repository using the following comman
 ```bash
 git clone <your-repo-url>
 cd <your-repo-directory>
-
+```
 To run the service 
 
 ```bash
+docker-compose build
+```
+
+```bash
 docker-compose up -d
+```

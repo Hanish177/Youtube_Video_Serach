@@ -1,14 +1,16 @@
-version: '3'
 services:
   frontend:
     build:
-      context: ./youtube-frontend
+      context: ./youtube_frontend  # Assuming your frontend code is in a directory named 'frontend'
     ports:
       - "3000:3000"
+    volumes:
+      - ./youtube_frontend:/app
+      - /app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://backend:5000
     depends_on:
       - backend
-    volumes:
-    - ./youtube-frontend/src/VideoList.js:/app/src/VideoList.js
 
   backend:
     build:
@@ -21,14 +23,13 @@ services:
       - DB_NAME=${DB_NAME}
       - API_KEY=${API_KEY}
     volumes:
-    - ./youtube_backend/app.py:/app/app.py
+      - ./youtube_backend:/app
     ports:
       - "5000:5000"
     depends_on:
-      db :
-        condition: service_healthy  # Wait until db service is healthy
-    
-  
+      db:
+        condition: service_healthy
+
   db:
     image: postgres:13
     environment:
@@ -39,6 +40,6 @@ services:
       - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s          # Check every 10 seconds
-      timeout: 5s           # Timeout for the check
-      retries: 5 
+      interval: 10s
+      timeout: 5s
+      retries: 5

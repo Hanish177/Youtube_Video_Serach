@@ -1,5 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from datetime import datetime, timedelta
+import pytz
 import requests
 import psycopg2
 from psycopg2.extras import execute_values
@@ -7,7 +9,7 @@ from psycopg2 import OperationalError,sql
 import os
 
 app = Flask(__name__)
-CORS(app, origins=["http://frontedn:3000"])
+CORS(app, origins="*")
 
 # PostgreSQL database configuration
 db_config = {
@@ -25,25 +27,9 @@ try:
 except OperationalError as e:
     print("Error while connecting to PostgreSQL", e)
 
-@app.route('/api/start_cron', methods=['POST'])
-def start_cron():
-    try:
-        # Add a new cron job for fetching videos every 10 minutes
-        cron_job = "*/10 * * * * /path/to/fetch_videos.sh"  # Adjust the path accordingly
-        # Check if the cron job is already present
-        os.system(f"(crontab -l | grep -v 'fetch_videos.sh'; echo '{cron_job}') | crontab -")
-        return jsonify({"message": "Cron job started successfully."}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/stop_cron', methods=['POST'])
-def stop_cron():
-    try:
-        # Remove the cron job that contains "fetch_videos.sh"
-        os.system(f"crontab -l | grep -v 'fetch_videos.sh' | crontab -")
-        return jsonify({"message": "Cron job stopped successfully."}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+@app.route('/api/health', methods=['GET'])
+def health():
+    return 'good health'
 
 def create_database():
     # Connect to the PostgreSQL server
@@ -73,31 +59,43 @@ def create_table():
     conn = psycopg2.connect(**db_config)
     cursor = conn.cursor()
     
-    # SQL statement to create the table
-    create_table_query = """
-    CREATE TABLE IF NOT EXISTS videos (
-        video_id VARCHAR(50) PRIMARY KEY NOT NULL,
-        title TEXT,
-        description TEXT,
-        published_at TIMESTAMP WITHOUT TIME ZONE,
-        thumbnail_url TEXT,
-        tags TEXT[]
-    );
-    """
+    # Define the table name and columns
+    table_name = "videos"
+    columns = {
+        "video_id": "VARCHAR(50) PRIMARY KEY NOT NULL",
+        "title": "TEXT",
+        "description": "TEXT",
+        "published_at": "TIMESTAMP WITHOUT TIME ZONE",
+        "thumbnail_url": "TEXT",
+        "tags": "TEXT[]"
+    }
+
+    # SQL statement to check if the table exists
+    check_table_exists_query = sql.SQL("""
+        SELECT EXISTS (
+            SELECT 1 
+            FROM information_schema.tables 
+            WHERE table_name = {table}
+        );
+    """).format(table=sql.Literal(table_name))
+
+    # SQL statement to create the table if it doesn't exist
+    create_table_query = sql.SQL("CREATE TABLE {table} ({fields});").format(
+        table=sql.Identifier(table_name),
+        fields=sql.SQL(", ").join(
+            sql.SQL("{} {}").format(sql.Identifier(col), sql.SQL(dtype)) for col, dtype in columns.items()
+        )
+    )
+
     try:
-        # Check if the table exists by querying the information schema
-        cursor.execute("""
-            SELECT EXISTS (
-                SELECT 1 
-                FROM information_schema.tables 
-                WHERE table_name = 'videos'
-            );
-        """)
+        # Check if the table exists
+        cursor.execute(check_table_exists_query)
         exists = cursor.fetchone()[0]
         
         if not exists:
             # Create the table if it doesn't exist
             cursor.execute(create_table_query)
+            conn.commit()
             print("Table 'videos' created successfully.")
         else:
             print("Table 'videos' already exists. No need to create.")
@@ -107,6 +105,8 @@ def create_table():
         cursor.close()
         conn.close()
 
+
+
 @app.route('/api/videos', methods=['GET'])
 def get_videos():
     query = request.args.get('query', 'cricket')  # Default to 'cricket'
@@ -115,12 +115,18 @@ def get_videos():
     video_details_url = "https://www.googleapis.com/youtube/v3/videos"
 
     # Step 1: Fetch video IDs
+    now = datetime.now(pytz.UTC)
+    published_after = now - timedelta(days=7)
+    # Format datetime in ISO 8601 format as required by YouTube API
+    published_after_str = published_after.isoformat()
     search_params = {
         "part": "snippet",
         "q": query,
         "type": "video",
+        "order": "date",  # Sort by date to get latest videos
         "maxResults": 50,
-        "fields": "items(id/videoId)",
+        "publishedAfter": published_after_str,
+        "fields": "items(id/videoId,snippet/publishedAt)",  # Added publishedAt to verify dates
         "key": api_key
     }
     search_response = requests.get(search_url, params=search_params)
@@ -238,28 +244,41 @@ def search_videos():
 
     offset = (page - 1) * limit  # Calculate offset for pagination
 
+    # Split the search query into individual keywords
+    keywords = query.split()
+    like_clauses = []
+    params = []
+
+    # Construct the LIKE clauses for each keyword
+    for word in keywords:
+        like_clauses.append("LOWER(title) LIKE LOWER(%s) OR LOWER(description) LIKE LOWER(%s)")
+        params.extend([f"%{word}%", f"%{word}%"])
+
+    # Join the LIKE clauses with AND for requiring all keywords to match
+    where_clause = " AND ".join(like_clauses)
+
     # Connect to the PostgreSQL database
     with psycopg2.connect(**db_config) as conn:
         with conn.cursor() as cur:
             # Step 1: Retrieve count of total matching records for pagination
-            count_query = """
+            count_query = f"""
                 SELECT COUNT(*)
                 FROM videos
-                WHERE LOWER(title) LIKE LOWER(%s) OR LOWER(description) LIKE LOWER(%s);
+                WHERE {where_clause};
             """
-            search_param = f"%{query}%"
-            cur.execute(count_query, (search_param, search_param))
+            cur.execute(count_query, tuple(params))
             total_count = cur.fetchone()[0]
 
             # Step 2: Retrieve paginated video details matching the search query in descending order by published_at
-            search_query = """
+            search_query = f"""
                 SELECT video_id, title, description, published_at, thumbnail_url, tags
                 FROM videos
-                WHERE LOWER(title) LIKE LOWER(%s) OR LOWER(description) LIKE LOWER(%s)
+                WHERE {where_clause}
                 ORDER BY published_at DESC
                 LIMIT %s OFFSET %s;
             """
-            cur.execute(search_query, (search_param, search_param, limit, offset))
+            params.extend([limit, offset])  # Add limit and offset to params
+            cur.execute(search_query, tuple(params))
             rows = cur.fetchall()
 
             # Step 3: Format the response with the paginated results
@@ -283,6 +302,7 @@ def search_videos():
         "videos": videos
     }
     return jsonify(response)
+
 
 if __name__ == '__main__':
     create_database()

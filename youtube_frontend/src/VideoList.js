@@ -5,26 +5,55 @@ import './App.css';
 const VideoList = () => {
     const [videos, setVideos] = useState([]);
     const [page, setPage] = useState(1);
-    const [limit] = useState(10);
+    const [limit] = useState(10); // Assuming limit is fixed; change if needed
     const [totalPages, setTotalPages] = useState(1);
+    const [searchQuery, setSearchQuery] = useState(""); // Defined setSearchQuery with useState
 
-    const fetchVideos = useCallback(async () => {
-        const response = await fetch(`http://backend:5000/api/videos_detail?page=${page}&limit=${limit}`);
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+    // Function to fetch videos with conditional URL based on search query
+    const fetchVideos = useCallback(async (url) => {
+        const response = await fetch(url);
         const data = await response.json();
-        console.log(" have data")
-        setVideos(data.videos);
 
+        setVideos(data.videos);
         const totalCount = data.total_count;
-        setTotalPages(Math.ceil(totalCount / limit)); // Calculate total pages
-    }, [page, limit]);
+        setTotalPages(Math.ceil(totalCount / limit));
+    }, [limit]);
 
     useEffect(() => {
-        fetchVideos();
-    }, [fetchVideos]);
+        const url = searchQuery 
+            ? `${API_URL}/api/videos/search?query=${searchQuery}&page=${page}&limit=${limit}`
+            : `${API_URL}/api/videos_detail?page=${page}&limit=${limit}`;
+        fetchVideos(url);
+    }, [fetchVideos, searchQuery, page, limit, API_URL]); // Added limit as a dependency
+
+    // Search handler
+    const handleSearch = (e) => {
+        e.preventDefault();
+        setPage(1); // Reset to first page for new search
+    };
+
+    // Reset handler to call video_details API directly
+    const handleReset = () => {
+        setSearchQuery("");
+        setPage(1);
+        fetchVideos(`${API_URL}/api/videos_detail?page=1&limit=${limit}`); // Explicitly call video_details API
+    };
 
     return (
         <div className="video-list">
             <h1>Video List</h1>
+            <div className="search-bar">
+                <input 
+                    type="text" 
+                    placeholder="Search videos..." 
+                    value={searchQuery} 
+                    onChange={(e) => setSearchQuery(e.target.value)} 
+                />
+                <button onClick={handleSearch}>Search</button>
+                <button onClick={handleReset}>Reset</button>
+            </div>
             <div className="video-grid">
                 {videos.map(video => (
                     <VideoCard key={video.video_id} video={video} />

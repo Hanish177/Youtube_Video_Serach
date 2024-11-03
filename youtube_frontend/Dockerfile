@@ -1,21 +1,25 @@
-# Dockerfile for Frontend
-FROM node:14
+# Frontend Dockerfile
+FROM node:18-alpine
 
-# Set the working directory
 WORKDIR /app
 
-# Copy package.json and install dependencies
+# Copy package.json and package-lock.json
 COPY package*.json ./
+
+# Install dependencies
 RUN npm install
 
-# Copy the rest of the application code
+# Copy the rest of the application
 COPY . .
 
-# Build the app for production
+# Build the application
 RUN npm run build
 
-# Expose the port the app runs on
+# Install serve to run the production build
+RUN npm install -g serve
+
+# Expose port 3000
 EXPOSE 3000
 
-# Run the app
-CMD ["npm", "start"]
+# Start the application
+CMD ["serve", "-s", "build", "-l", "3000"]
